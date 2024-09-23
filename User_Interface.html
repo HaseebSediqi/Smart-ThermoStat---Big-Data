@@ -1,0 +1,214 @@
+<html>
+<head>
+    <title>Virtual Thermostat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #F3F3F3;
+            color: #333;
+        }
+        #content {
+            width: 80%;
+            margin: 50px auto;
+            padding: 20px;
+            text-align: center;
+            background: #FFF;
+            border-radius: 8px;
+            box-shadow: 0px 2px 5px rgba(0,0,0,0.1);
+        }
+        #tempDisplay, #suggestedTempDisplay {
+            font-size: 24px;
+            margin-bottom: 20px;
+            border: 2px solid #007BFF;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        input, select, button {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border: 1px solid #007BFF;
+        }
+        button {
+            background: #007BFF;
+            color: #FFF;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div id="content">
+        <h2>Virtual Thermostat</h2>
+        <div id="tempDisplay"></div>
+        <div id="suggestedTempDisplay"></div>
+
+        <input id="tempInput" type="number" placeholder="Desired temperature (°C)"> <br>
+        <button id="tempButton" onclick="updateTemperature()">Set Temperature</button>
+
+        <hr>
+
+        <input id="startTimeInput" type="time"> to <input id="endTimeInput" type="time"><br>
+        <input id="tempScheduleInput" type="number" placeholder="°C"><br>
+        <button id="scheduleButton" onclick="updateSchedule()">Set Schedule</button>
+
+        <hr>
+
+        <select id="modeSelect" onchange="updateMode()">
+            <option value="manual">Manual</option>
+            <option value="ai">AI Mode</option>
+        </select>
+
+        <hr>
+
+        <p id="statusDisplay">Status: Off</p>
+        <button id="toggleButton" onclick="toggleThermostat()">Turn On</button>
+
+    </div>
+    <script>
+        function updateTemperature() {
+            var temp = document.getElementById("tempInput").value;
+            if(temp < 16 || temp > 30){
+                alert("The temperature must be between 16°C and 30°C.");
+                return;
+            }
+            document.getElementById("tempDisplay").textContent = temp + "°C";
+        }
+
+        let scheduleInterval; // Variable to store our interval
+        let scheduledTemp; // Variable to store the scheduled temperature
+
+        function updateSchedule() {
+            let startTime = document.getElementById("startTimeInput").value;
+            let endTime = document.getElementById("endTimeInput").value;
+            scheduledTemp = document.getElementById("tempScheduleInput").value;
+            if (scheduledTemp < 16 || scheduledTemp > 30){
+                alert("The temperature must be between 16°C and 30°C.");
+                return;
+            }
+            // Store the start and end times in local storage
+            localStorage.setItem('startTime', startTime);
+            localStorage.setItem('endTime', endTime);
+            localStorage.setItem('scheduledTemp', scheduledTemp);
+            alert("Schedule set to: " + startTime + " - " + endTime + " " + scheduledTemp + "°C");
+        }
+
+        function updateMode() {
+            var mode = document.getElementById("modeSelect").value;
+            var startTimeInput = document.getElementById("startTimeInput");
+            var endTimeInput = document.getElementById("endTimeInput");
+            var tempScheduleInput = document.getElementById("tempScheduleInput");
+            var scheduleButton = document.getElementById("scheduleButton");
+            var tempInput = document.getElementById("tempInput");
+            var tempButton = document.getElementById("tempButton");
+            
+            var isDisabled = mode === "ai";
+            startTimeInput.disabled = isDisabled;
+            endTimeInput.disabled = isDisabled;
+            tempScheduleInput.disabled = isDisabled;
+            scheduleButton.disabled = isDisabled;
+            tempInput.disabled = isDisabled;
+            tempButton.disabled = isDisabled;
+
+            if (mode === 'ai') {
+                fetch('/suggested_temperature', {
+                    method: 'GET'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Update the temperature display with the suggested temperature
+                    document.getElementById("suggestedTempDisplay").textContent = "Suggested Thermostat Temperature: " + data.suggested_temp + "°C";
+                });
+            }
+        }
+
+        // Function to fetch and update temperature
+        function fetchAndUpdateTemperature() {
+            const apiKey = '141804de4ea61ac2a29b76576308ed37';
+            const city = 'Trento';
+            fetch(`http://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${apiKey}`)
+                .then(response => response.json())
+                .then(data => {
+                    const temperature = data.main.temp;
+                    const feels_like = data.main.feels_like;
+                    const humidity = data.main.humidity;
+                    const wind_speed = data.wind.speed;
+                    const weather = data.weather[0].main;
+
+                    document.getElementById("tempDisplay").innerHTML = `
+                        Current Trento Temperature: ${temperature}°C<br/>
+                        Feels Like: ${feels_like}°C<br/>
+                        Humidity: ${humidity}%<br/>
+                        Wind Speed: ${wind_speed} m/s<br/>
+                        Weather: ${weather}
+                    `;
+                })
+                .catch(err => console.error(err));
+
+            // Repeat every 5 minutes (300000 milliseconds)
+            setTimeout(fetchAndUpdateTemperature, 300000);
+        }
+        var thermostatOn = false;
+
+       function toggleThermostat() {
+            // Clear any existing interval
+            clearInterval(scheduleInterval);
+
+            thermostatOn = !thermostatOn;
+            document.getElementById("statusDisplay").textContent = "Status: " + (thermostatOn ? "On" : "Off");
+            document.getElementById("toggleButton").textContent = thermostatOn ? "Turn Off" : "Turn On";
+            
+            var shouldDisable = !thermostatOn || document.getElementById("modeSelect").value === "ai";
+            document.getElementById("startTimeInput").disabled = shouldDisable;
+            document.getElementById("endTimeInput").disabled = shouldDisable;
+            document.getElementById("tempScheduleInput").disabled = shouldDisable;
+            document.getElementById("scheduleButton").disabled = shouldDisable;
+            document.getElementById("tempInput").disabled = shouldDisable;
+            document.getElementById("tempButton").disabled = shouldDisable;
+
+            if (!thermostatOn) {
+                document.getElementById("tempDisplay").textContent = "Thermostat is turned off.";
+                document.getElementById("suggestedTempDisplay").textContent = "";
+            } else {
+                document.getElementById("tempDisplay").textContent = "Thermostat is On.";
+                // Start the interval to check the scheduled temperature every minute
+                scheduleInterval = setInterval(() => {
+                    // Get current time
+                    const currentTime = new Date();
+                    // Get start and end times from local storage
+                    const startTime = new Date(`01/01/2000 ${localStorage.getItem('startTime')}`);
+                    const endTime = new Date(`01/01/2000 ${localStorage.getItem('endTime')}`);
+                    // Check if the current time is between the start and end times
+                    if (currentTime.getHours() >= startTime.getHours() && currentTime.getHours() <= endTime.getHours()) {
+                        // If it is, set the temperature display to the scheduled temperature
+                        document.getElementById("tempDisplay").textContent = "Scheduled Temperature: " + localStorage.getItem('scheduledTemp') + "°C";
+                    }
+                }, 60000); // Check every minute
+                updateMode();
+            }
+        }
+        function refreshInterface() {
+            fetchAndUpdateTemperature();
+            updateMode();
+            toggleThermostat();
+        }
+        setInterval(refreshInterface, 10000);
+
+
+        
+
+
+// Call toggleThermostat on page load to initialize everything in the off state
+toggleThermostat();
+
+
+
+        // Fetch and update temperature when the page loads
+        fetchAndUpdateTemperature();
+   </script>
+
+</body>
+</html>
